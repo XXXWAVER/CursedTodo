@@ -1,102 +1,86 @@
 import curses
 from curses import wrapper
 from curses.textpad import Textbox, rectangle
-import csv
 
-list = []
+tasks = [
+    ("Walk Dexter 10am", False),
+    ("Hoover floor", False),
+    ("Mop floor", False),
+    ("Walk Dexter 2PM", False),
+    ("Fix printer", False),
+    ("Walk Dexter 6pm", False),
+    ("Walk Dexter 10pm", False)
+]
 
-def writetolist():
-    with open("todolist.csv", "w", newline="") as csvfile:
-        csv_write = csv.writer(csvfile)
-        for chore in list:
-            csv_write.writerow(chore)
-        csvfile.close
-
-def readfromlist():
-    with open("todolist.csv", "r") as csvfile:
-        csv_reader = csv.reader(csvfile)
-        for row in csv_reader:
-            if row[1] == "True":
-                tempbool = True
-            else:
-                tempbool = False
-
-            test = [str(row[0]),(tempbool)]
-            list.append(test)
-        csvfile.close
-
-try:
-    readfromlist()
-except:
-    writetolist()
-    
 def main(stdscr):
-    x = True
     stdscr.nodelay(True)
     selected = 0
-    listlength = (len(list))
+
+    while True:
+        key = stdscr.getch()
+        if key == curses.KEY_DOWN:
+            selected = min(selected + 1, len(tasks))
+        elif key == ord('x'):
+            break
+        elif key == curses.KEY_UP:
+            selected = max(selected - 1, 0)
+        elif key == ord(' ') and selected < len(tasks):
+            tasks[selected] = (tasks[selected][0], not tasks[selected][1])
+        elif key == ord(' ') and selected == len(tasks):
+            add_new_task(stdscr, selected + 2, tasks)
+        elif key == ord('d') and selected < len(tasks):
+            del tasks[selected]
+            selected = max(0, selected - 1)
+            if selected == len(tasks) - 1:
+                selected += 1
+        elif key == ord('r') and selected < len(tasks):
+            rename_task(stdscr, selected + 2, tasks, selected)
+
+        render_screen(stdscr, selected, tasks)
+
+def add_new_task(stdscr, y, tasks):
+    inp = curses.newwin(1, 50, y, 0)
+    txtb = inp.subwin(1, 25, y, 22)
+    inp.addstr("Please input new task:")
+    tb = Textbox(txtb)
+    inp.refresh()
+    tb.edit()
+    new_task = tb.gather().strip()
+    if new_task:
+        tasks.append((new_task, False))
+
+def rename_task(stdscr, y, tasks, selected_index):
+    inp = curses.newwin(1, 50, y, 0)
+    txtb = inp.subwin(1, 25, y, 22)
+    inp.addstr("Rename task to:")
+    tb = Textbox(txtb)
+    inp.refresh()
+    tb.edit()
+    new_task_name = tb.gather().strip()
+    if new_task_name:
+        tasks[selected_index] = (new_task_name, tasks[selected_index][1])
+
+def render_screen(stdscr, selected, tasks):
     stdscr.clear()
-    if listlength == 0:
-        inp = curses.newwin(1,50, selected+2,0)
-        txtb = inp.subwin(1, 25, selected+2, 23)
-        inp.addstr("Please input new task: ")
-        tb = curses.textpad.Textbox(txtb)
-        inp.refresh()
-        tb.edit()
-        tbout = tb.gather()
-        list.append([(tbout),(False)])
-        listlength = (len(list))
-        selected = selected+1
-        writetolist()
-    while x == True: #Check for user inputs
-        try:
-            key = stdscr.getkey()
-        except:
-            key = None
-        if key == "KEY_DOWN":
-            selected += 1
-        elif key == "x":
-            x = False
-        elif key == "KEY_UP":
-            selected -= 1
-        elif key == " " and selected != listlength:
-            list[selected][1] = not list[selected][1]
-            writetolist()
-        elif key == " " and selected == listlength:
-            inp = curses.newwin(1,50, selected+2,0)
-            txtb = inp.subwin(1, 25, selected+2, 22)
-            inp.addstr("Please input new task:")
-            tb = curses.textpad.Textbox(txtb)
-            inp.refresh()
-            tb.edit()
-            tbout = tb.gather()
-            list.append([(tbout),(False)])
-            listlength = (len(list))
-            selected = selected+1
-            writetolist()
+    curses.curs_set(0)
 
-        if selected < 0: #Keep selection within the length of the list
-            selected = 0
-        elif selected >= listlength:
-            selected = listlength
-        stdscr.clear()
-        stdscr.addstr(0, 0, "Todo List", curses.A_UNDERLINE)
-        for i in range(listlength):
-            y = i+2
-            stdscr.addstr(y, 0, (str(i+1)+")"))
-            if i == selected and i < listlength:
-                stdscr.addstr(y, 3, list[i][0], curses.A_BLINK)
-            elif i < listlength:
-                stdscr.addstr(y, 3, list[i][0])
-            if list[i][1] == True:
-                stdscr.addstr(y, 28, "[X]")
-            else:
-                stdscr.addstr(y, 28, "[ ]")
-        if selected == listlength:
-            stdscr.addstr(y+1, 0, "Add new item!", curses.A_BLINK)
-        else:
-            stdscr.addstr(y+1, 0, "Add new item!")
-        stdscr.refresh()
+    stdscr.addstr(0, 0, "Todo List", curses.A_UNDERLINE)
+    for i, (task, completed) in enumerate(tasks):
+        y = i + 2
+        stdscr.addstr(y, 0, f"{i+1})")
+        attr = curses.A_BLINK if i == selected else 0
+        stdscr.addstr(y, 3, task, attr)
+        stdscr.addstr(y, 28, "[X]" if completed else "[ ]")
 
+    add_new_item_text = "Add new item!"
+    attr = curses.A_BLINK if selected == len(tasks) else 0
+    stdscr.addstr(len(tasks) + 2, 0, add_new_item_text, attr)
+
+    controls_text = "Controls: ↑↓ navigate, Space toggle/add, d delete, r rename, x exit"
+    stdscr.addstr(len(tasks) + 3, 0, controls_text)
+
+    stdscr.move(len(tasks) + 2, len(add_new_item_text))
+
+    stdscr.refresh()
 
 wrapper(main)
